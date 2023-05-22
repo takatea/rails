@@ -55,29 +55,30 @@ end
 class ApplicationMailbox < ActionMailbox::Base
   routing ->(inbound_email) do
      inbound_email.mail.subject.match?('test')
-  end => :valid_case
-  routing (/^replies@/i) => :replies
+  end => :first_case
+  routing all: :defaults
 end
 
-class ValidCaseMailbox < ActionMailbox::Base
+class FirstCaseMailbox < ActionMailbox::Base
   def process
-    bounced!
   end
 end
 
-class RepliesMailbox < ActionMailbox::Base
+class DefaultsMailbox < ApplicationMailbox
   def process
-    $processed = mail.subject
+    bounced!
   end
 end
 
 require "minitest/autorun"
 require "active_job"
 
-class RepliesMailboxTest < ActionMailbox::TestCase
+class FirstCaseMailboxTest < ActionMailbox::TestCase
+  include ActiveJob::TestHelper
+  
   setup do
     @inbound_email = receive_inbound_email_from_mail\
-      to: "test@example.com", subject: "test mail"
+      to: "test@example.com", subject: "valid subject"
   end
 
   test "successful mailbox processing" do
@@ -85,10 +86,9 @@ class RepliesMailboxTest < ActionMailbox::TestCase
   end
 
   test "route_later dose not working" do
-    debugger
-
     perform_enqueued_jobs do
-      ActionMailbox::InboundEmail.route_later @inbound_email
+      @inbound_email.route_later 
+      assert_equal @inbound_email.reload.status, "bounced"
     end
   end
 end
